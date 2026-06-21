@@ -12,11 +12,11 @@ html, body {
   margin: 0;
   width: 100%;
   height: 100%;
+  background: #f4f0df;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   overflow: hidden;
 }
 
-/* 动态背景 */
 body {
   display: flex;
   align-items: center;
@@ -25,7 +25,6 @@ body {
   background-position: center;
 }
 
-/* 模糊遮罩（你原来的精髓） */
 .overlay {
   position: fixed;
   inset: 0;
@@ -33,7 +32,6 @@ body {
   backdrop-filter: blur(2px);
 }
 
-/* 卡片（保留你的审美） */
 .card {
   position: relative;
   z-index: 2;
@@ -52,6 +50,7 @@ body {
   aspect-ratio: 1 / 1;
   border-radius: 22px;
   object-fit: cover;
+  display: block;
   box-shadow: 0 14px 40px rgba(70, 86, 62, 0.28);
 }
 
@@ -60,6 +59,7 @@ h1 {
   font-size: 22px;
   font-weight: 600;
   color: #42533a;
+  letter-spacing: 0.04em;
 }
 
 p {
@@ -82,6 +82,11 @@ button {
 button:active {
   transform: scale(0.98);
 }
+
+audio {
+  width: 100%;
+  margin-top: 16px;
+}
 </style>
 </head>
 
@@ -90,56 +95,138 @@ button:active {
 <div class="overlay"></div>
 
 <main class="card">
-  <img class="cover" id="cover" />
-  <h1 id="title"></h1>
-  <p id="status">正在加载...</p>
+  <img class="cover" id="cover" alt="cover" />
+
+  <h1 id="title">正在加载...</h1>
+  <p id="status">正在准备音频...</p>
 
   <button id="btn">点击播放</button>
 
-  <audio id="audio"></audio>
+  <audio id="audio" preload="auto" controls></audio>
 </main>
 
 <script>
 const params = new URLSearchParams(window.location.search);
-const id = params.get("id") || "1";
+const rawId = params.get("id") || "1";
 
-/* ===== 动态资源 ===== */
+const songTitles = {
+  "1": "芊芊",
+  "2": "陌上花开",
+  "3": "故人叹",
+  "4": "曾共霜雪",
+  "5": "我曾经也想过离开这个世界",
+  "6": "话蝶",
+  "7": "云梦传奇",
+  "8": "戏语花"
+};
+
+const id = songTitles[rawId] ? rawId : "1";
+
 const audio = document.getElementById("audio");
 const cover = document.getElementById("cover");
 const title = document.getElementById("title");
-const body = document.body;
-const status = document.getElementById("status");
+const statusText = document.getElementById("status");
 const btn = document.getElementById("btn");
 
 const imgPath = `assets/images/${id}.jpg`;
 const audioPath = `assets/audio/${id}.mp3`;
 
-/* ===== 绑定资源 ===== */
 cover.src = imgPath;
+document.body.style.backgroundImage = `url("${imgPath}")`;
+
+title.textContent = `玄觞 - ${songTitles[id]}`;
+document.title = `玄觞 - ${songTitles[id]}`;
+
 audio.src = audioPath;
-body.style.backgroundImage = `url('${imgPath}')`;
-title.innerText = `玄觞`;
+audio.load();
 
-/* ===== 播放控制 ===== */
-let playing = false;
+let autoplayTried = false;
 
-btn.onclick = async () => {
-  try {
-    if (!playing) {
-      await audio.play();
-      playing = true;
-      btn.innerText = "暂停";
-      status.innerText = "正在播放";
-    } else {
-      audio.pause();
-      playing = false;
-      btn.innerText = "播放";
-      status.innerText = "已暂停";
-    }
-  } catch (e) {
-    status.innerText = "点击后才能播放";
+function getAudioErrorMessage() {
+  if (!audio.error) return "未知音频错误";
+
+  switch (audio.error.code) {
+    case 1:
+      return "音频加载被中止";
+    case 2:
+      return "网络错误，音频没有加载成功";
+    case 3:
+      return "音频文件损坏或格式无法解码";
+    case 4:
+      return "音频路径错误、文件不存在，或格式不支持";
+    default:
+      return "未知音频错误";
   }
-};
+}
+
+async function playAudio(fromAutoplay = false) {
+  try {
+    await audio.play();
+
+    statusText.textContent = "正在播放";
+    btn.textContent = "暂停";
+  } catch (error) {
+    if (audio.error) {
+      statusText.textContent = getAudioErrorMessage();
+    } else if (fromAutoplay) {
+      statusText.textContent = "手机浏览器限制自动播放，请点击下方按钮播放";
+    } else {
+      statusText.textContent = "播放失败，请检查 MP3 是否上传成功";
+    }
+
+    btn.textContent = "点击播放";
+  }
+}
+
+audio.addEventListener("loadedmetadata", () => {
+  statusText.textContent = "音频已加载，正在尝试自动播放...";
+});
+
+audio.addEventListener("canplay", () => {
+  if (!autoplayTried) {
+    autoplayTried = true;
+    playAudio(true);
+  }
+});
+
+audio.addEventListener("playing", () => {
+  statusText.textContent = "正在播放";
+  btn.textContent = "暂停";
+});
+
+audio.addEventListener("pause", () => {
+  if (!audio.ended) {
+    statusText.textContent = "已暂停";
+    btn.textContent = "继续播放";
+  }
+});
+
+audio.addEventListener("ended", () => {
+  statusText.textContent = "播放结束";
+  btn.textContent = "重新播放";
+});
+
+audio.addEventListener("error", () => {
+  statusText.textContent = getAudioErrorMessage();
+  btn.textContent = "音频加载失败";
+});
+
+btn.addEventListener("click", async () => {
+  if (audio.paused) {
+    await playAudio(false);
+  } else {
+    audio.pause();
+  }
+});
+
+window.addEventListener("load", () => {
+  setTimeout(() => {
+    if (!autoplayTried) {
+      autoplayTried = true;
+      playAudio(true);
+    }
+  }, 500);
+});
 </script>
 
 </body>
